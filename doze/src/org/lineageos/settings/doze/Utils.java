@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015 The CyanogenMod Project
+ * Copyright (C) 2015 The CyanogenMod Project
+ *               2017-2019 The LineageOS Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +19,16 @@ package org.lineageos.settings.doze;
 
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
+import android.hardware.display.AmbientDisplayConfiguration;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 import androidx.preference.PreferenceManager;
+
+import java.util.List;
 
 import static android.provider.Settings.Secure.DOZE_ENABLED;
 
@@ -33,14 +39,12 @@ public final class Utils {
 
     private static final String DOZE_INTENT = "com.android.systemui.doze.pulse";
 
-    protected static final String AMBIENT_DISPLAY_KEY = "doze_enabled";
-    protected static final String PICK_UP_KEY = "pick_up";
-    protected static final String TILT_ALWAYS_KEY = "tilt_always";
+
+    protected static final String CATEG_PROX_SENSOR = "proximity_sensor";
+
+    protected static final String GESTURE_PICK_UP_KEY = "gesture_pick_up";
     protected static final String GESTURE_HAND_WAVE_KEY = "gesture_hand_wave";
     protected static final String GESTURE_POCKET_KEY = "gesture_pocket";
-    protected static final String PROXIMITY_ALWAYS_KEY = "proximity_always";
-
-    public static final Uri DOZE_ENABLED_URI = Settings.Secure.getUriFor(DOZE_ENABLED);
 
     protected static void startService(Context context) {
         if (DEBUG) Log.d(TAG, "Starting service");
@@ -54,20 +58,22 @@ public final class Utils {
                 UserHandle.CURRENT);
     }
 
+    protected static void checkDozeService(Context context) {
+        if (isDozeEnabled(context)  && sensorsEnabled(context)) {
+            startService(context);
+        } else {
+            stopService(context);
+        }
+    }
+
     protected static boolean isDozeEnabled(Context context) {
         return Settings.Secure.getInt(context.getContentResolver(),
                 DOZE_ENABLED, 1) != 0;
     }
 
-    protected static boolean enableDoze(boolean enable, Context context) {
-        boolean dozeEnabled = Settings.Secure.putInt(context.getContentResolver(),
-                              DOZE_ENABLED, enable ? 1 : 0);
-        if (enable) {
-            startService(context);
-        } else {
-            stopService(context);
-        }
-        return dozeEnabled;
+    protected static boolean enableDoze(Context context, boolean enable) {
+        return Settings.Secure.putInt(context.getContentResolver(),
+                DOZE_ENABLED, enable ? 1 : 0);
     }
 
     protected static void launchDozePulse(Context context) {
@@ -76,33 +82,38 @@ public final class Utils {
                 new UserHandle(UserHandle.USER_CURRENT));
     }
 
-    protected static boolean pickUpEnabled(Context context) {
+    protected static boolean isGestureEnabled(Context context, String gesture) {
         return PreferenceManager.getDefaultSharedPreferences(context)
-                .getBoolean(PICK_UP_KEY, false);
+                .getBoolean(gesture, false);
     }
 
-    protected static boolean tiltAlwaysEnabled(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context)
-                .getBoolean(TILT_ALWAYS_KEY, false);
+    protected static boolean isPickUpEnabled(Context context) {
+        return isGestureEnabled(context, GESTURE_PICK_UP_KEY);
     }
 
-    protected static boolean handwaveGestureEnabled(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context)
-                .getBoolean(GESTURE_HAND_WAVE_KEY, false);
+    protected static boolean isHandwaveGestureEnabled(Context context) {
+        return isGestureEnabled(context, GESTURE_HAND_WAVE_KEY);
     }
 
-    protected static boolean pocketGestureEnabled(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context)
-                .getBoolean(GESTURE_POCKET_KEY, false);
-    }
-
-    protected static boolean proximityAlwaysEnabled(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context)
-                .getBoolean(PROXIMITY_ALWAYS_KEY, false);
+    protected static boolean isPocketGestureEnabled(Context context) {
+        return isGestureEnabled(context, GESTURE_POCKET_KEY);
     }
 
     protected static boolean sensorsEnabled(Context context) {
-        return pickUpEnabled(context) || handwaveGestureEnabled(context)
-                || pocketGestureEnabled(context);
+        return isPickUpEnabled(context) || isHandwaveGestureEnabled(context)
+                || isPocketGestureEnabled(context);
+    }
+
+    protected static Sensor findSensorWithType(SensorManager sensorManager, String type) {
+        if (TextUtils.isEmpty(type)) {
+            return null;
+        }
+        List<Sensor> sensorList = sensorManager.getSensorList(Sensor.TYPE_ALL);
+        for (Sensor s : sensorList) {
+            if (type.equals(s.getStringType())) {
+                return s;
+            }
+        }
+        return null;
     }
 }
